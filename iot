@@ -1,0 +1,72 @@
+import paho.mqtt.publish as publish
+import psutil
+import string
+import time
+import smbus
+import board
+import busio
+import adafruit_ads1x15.ads1115 as ADS
+from adafruit_ads1x15.analog_in import AnalogIn
+##################################################
+
+# Dirección I2C y registros del MAX30100
+i2c= busio.I2C(board.SCL, board.SDA)
+ads = ADS.ADS1115(i2c) #configuramos el ADS 
+canal = AnalogIn(ads, ADS.P0) #ABRIMOS EL CANAL
+
+MAX30100_ADDRESS = 0x57
+MAX30100_MODE_CONFIG = 0x09
+MAX30100_SPO2_CONFIG = 0x0A
+MAX30100_FIFO_DATA = 0x07
+bus = smbus2.SMBus(1)
+##################################################
+# Configurar la frecuencia de muestreo y la potencia de emisión
+spo2_config = (0x03 << 5) | (0x03 << 2)  # Frecuencia de muestreo = 100 Hz, Potencia de emisión = 18.7 mA
+bus.write_byte_data(MAX30100_ADDRESS, MAX30100_SPO2_CONFIG, spo2_config)
+
+# The ThingSpeak Channel ID.
+# Replace <YOUR-CHANNEL-ID> with your channel ID.
+channel_ID = "2288443"
+
+# The hostname of the ThingSpeak MQTT broker.
+mqtt_host = "mqtt3.thingspeak.com"
+
+# Your MQTT credentials for the device
+mqtt_client_ID = "IzciLw8yCRYyMQkXCQYOJwg"
+mqtt_username  = "IzciLw8yCRYyMQkXCQYOJwg"
+mqtt_password  = "dnyadLwT8MHSFXW9Baevt2yI"  
+
+t_transport = "tcp"#DEFINIMOS LA FORMAD DE ENVIAR LOS DATOS
+t_port = 1883#SELECCIONAMOS EL PUERTO
+
+topic = "channels/" + channel_ID + "/publish"
+while (True):
+    valor = (canal.value/65535)*3.3#FORMULA PARA SABER QUE DATOS ESTAMOS TOMANDO DEL ADC DEL ECG
+    print(valor)#IMPRIMIMOS EL VALOR
+    # Leer datos del FIFO
+    data = bus.read_i2c_block_data(MAX30100_ADDRESS, MAX30100_FIFO_DATA, 6)
+    ir_value = (data[3] << 16) | (data[4] << 8) | data[5]
+    red_value = (data[0] << 16) | (data[1] << 8) | data[2]
+        
+     # Calcular la frecuencia cardíaca (pulso)
+    Pulso = ir_value / 5.0  # Ajuste empírico
+        
+    # Calcular la oxigenación en sangre como porcentaje
+    Oxigenacion = (red_value / ir_value) * 100.0
+    
+    # get the system performance data over 20 seconds.
+    
+
+    # build the payload string.
+    payload = "field1=" + str(Oxigenacion)+ "&field2="+str(Pulso)+ "&field3=" +str(valor)
+    
+
+    # attempt to publish this data to the topic.
+    try:
+        print ("Writing Payload = ", payload," to host: ", mqtt_host, " clientID= ", mqtt_client_ID, " User ", mqtt_username, " PWD ", mqtt_password)
+        publish.single(topic, payload, hostname=mqtt_host, transport=t_transport, port=t_port, client_id=mqtt_client_ID, auth={'username':mqtt_username,'password':mqtt_password})
+    #except (keyboardInterrupt)
+        #break
+    except Exception as e:
+        print (e) 
+# Create the topic string.
